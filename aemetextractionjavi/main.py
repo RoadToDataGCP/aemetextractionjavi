@@ -18,8 +18,6 @@ def main():
     duracion = hora_fin - hora_inicio
     print(f"⏱️ Duración total del proceso: {formato_hms(duracion)}")
     print("🔄 Subiendo archivos a bucket...")
-    subir_a_bucket()
-    print("🔄 Archivos subidos a bucket")
-
+    
 if __name__ == "__main__":
     main()

@@ -80,6 +80,9 @@ def cargar_predicciones():
 
     convertir_json_a_csv(output_file, final_file)
     print(f"✅ CSV de predicciones por municipio creado en '{final_file}'")
+    subir_a_bucket(final_file, "aemetextractionjavi")
+    print("🔄 Archivos subidos a bucket")
+
 
 def limpiar_archivos_generados():
     print("🧹 Limpiando archivos generados de ejecuciones anteriores...")
