@@ -1,0 +1,13 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/r2d-interno-dev/aemetextractionjavi:v1.2-$COMMIT_SHA', './aemetextractionjavi']
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/r2d-interno-dev/aemetextractionjavi:v1.2-$COMMIT_SHA']
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args: ['run', 'jobs', 'deploy', 'aemetextractionjavi', '--image', 'gcr.io/r2d-interno-dev/aemetextractionjavi:v1.2-$COMMIT_SHA', '--region', 'europe-west1']
+
+images:
+  - 'gcr.io/r2d-interno-dev/aemetextractionjavi:v1.2-$COMMIT_SHA'
+
+logsBucket: 'gs://aemetextractionjavi/log_exports'
