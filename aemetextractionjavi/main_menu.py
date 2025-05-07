@@ -228,11 +228,6 @@ def cargar_csv_a_bigquery(client, csv_path, project_id, dataset_id, table_id):
     # Reemplazar los guiones por guiones bajos en los nombres de las columnas
     headers = [header.replace('-', '_') for header in headers]
 
-    # Construir el esquema basado en los encabezados modificados
-    schema = [bigquery.SchemaField(col, "STRING") for col in headers]
-    schema.append(bigquery.SchemaField("fecha_carga", "DATE"))
-    job_config.schema = schema
-
     # Añadir columna con la fecha de carga
     today = datetime.datetime.now().strftime("%Y-%m-%d")
     
