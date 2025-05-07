@@ -1,0 +1,9 @@
+# Ignorar el directorio __pycache__ (archivos compilados de Python)
+__pycache__/
+
+# Ignorar archivos .csv y .json
+*.csv
+*.json
+
+# Ignorar el directorio venv (virtual environment)
+venv/

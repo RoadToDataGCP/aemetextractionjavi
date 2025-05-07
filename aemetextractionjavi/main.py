@@ -1,5 +1,13 @@
 from main_menu import cargar_municipios, cargar_predicciones, formato_hms, limpiar_archivos_generados, subir_a_bucket
 import time
+import logging
+
+
+# Configurar logging si aún no está configurado
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 def main():
     limpiar_archivos_generados()
@@ -17,7 +25,7 @@ def main():
     print(f"⏱️ Carga de predicciones: {formato_hms(duracion_predicciones)}")
     duracion = hora_fin - hora_inicio
     print(f"⏱️ Duración total del proceso: {formato_hms(duracion)}")
-    print("🔄 Subiendo archivos a bucket...")
+
     
 if __name__ == "__main__":
     main()

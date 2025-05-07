@@ -1,6 +1,5 @@
 
 from connection import AemetAPIClient, procesar_municipios_sin_hilos
-from generator import create_csv_files_from_json, json_to_csv_historic, json_to_csv_predict
 import pandas as pd
 import datetime
 import logging
@@ -9,27 +8,7 @@ import json
 import csv
 import os
 from google.cloud import storage
-
-def cargar_estaciones():
-    client = AemetAPIClient()
-    print("📡 Obteniendo estaciones disponibles...")
-    estaciones = client.obtener_estaciones()
-
-    if not estaciones:
-        print("❌ No se pudieron obtener las estaciones.")
-        return
-
-    estaciones_json = []
-    for estacion in estaciones:
-        idema = estacion.get("indicativo")
-        nombre = estacion.get("nombre")
-        if idema and nombre:
-            estaciones_json.append({"idema": idema, "nombre": nombre})
-
-    with open("estaciones.json", "w", encoding="utf-8") as f:
-        json.dump(estaciones_json, f, indent=4, ensure_ascii=False)
-
-    print("✅ Listado de estaciones guardado en 'estaciones.json'.")
+from google.cloud import bigquery
 
 def cargar_municipios():
 
@@ -53,8 +32,6 @@ def cargar_municipios():
 
 # Función para cargar predicciones con manejo de errores, reintentos, logging y limitación de tasa
 def cargar_predicciones():
-    logging.basicConfig(level=logging.ERROR,
-                        format='%(asctime)s - %(levelname)s - %(message)s')
 
     client = AemetAPIClient()
 
@@ -80,9 +57,13 @@ def cargar_predicciones():
 
     convertir_json_a_csv(output_file, final_file)
     print(f"✅ CSV de predicciones por municipio creado en '{final_file}'")
-    subir_a_bucket(final_file, "aemetextractionjavi")
-    print("🔄 Archivos subidos a bucket")
-
+    #subir_a_bucket(final_file, "aemetextractionjavi")
+    automatizar_carga_bigquery(
+    csv_path=f"{final_file}",
+    project_id="r2d-interno-dev",
+    dataset_id="raw_aemet",
+    table_id="aemetextractionjavi_raw"
+)
 
 def limpiar_archivos_generados():
     print("🧹 Limpiando archivos generados de ejecuciones anteriores...")
@@ -121,59 +102,6 @@ def limpiar_archivos_generados():
 
 def formato_hms(segundos):
     return time.strftime("%H:%M:%S", time.gmtime(segundos))
-
-
-def main():
-    
-    while True:
-        print("\n📋 ¿Qué acción deseas realizar?")
-        print("1️⃣  Cargar datos de estaciones")
-        print("2️⃣  Cargar datos de municipios")
-        print("4️⃣  Cargar predicciones por municipio")
-        print("6️⃣  Proceso completo")
-        print("7️⃣  Limpiar archivos generados")
-        print("0️⃣  Salir")
-
-        opcion = input("👉 Ingresa una opción: ").strip()
-
-        if opcion == "1":
-            cargar_estaciones()
-        elif opcion == "2":
-            cargar_municipios()
-        elif opcion == "4":
-            cargar_predicciones()
-        elif opcion == "6":
-            hora_inicio = time.time()
-            print("🔄 Iniciando proceso completo...")
-            cargar_estaciones()
-            carga_estaciones=time.time()
-            cargar_municipios()
-            carga_municipios=time.time()
-            carga_historico=time.time()
-            cargar_predicciones()
-            carga_predicciones=time.time()
-            hora_fin = time.time()
-            print("🔄 Proceso completo")
-            duracion_estaciones = carga_estaciones - hora_inicio
-            duracion_municipios = carga_municipios - carga_estaciones
-            duracion_historico = carga_historico - carga_municipios
-            duracion_predicciones = carga_predicciones - carga_historico
-            duracion_combinacion = hora_fin - carga_predicciones
-            print(f"⏱️ Carga de estaciones: {formato_hms(duracion_estaciones)}")
-            print(f"⏱️ Carga de municipios: {formato_hms(duracion_municipios)}")
-            print(f"⏱️ Carga de histórico: {formato_hms(duracion_historico)}")
-            print(f"⏱️ Carga de predicciones: {formato_hms(duracion_predicciones)}")
-            print(f"⏱️ Combinación de datos: {formato_hms(duracion_combinacion)}")
-            duracion = hora_fin - hora_inicio
-            print(f"⏱️ Duración total del proceso: {formato_hms(duracion)}")
-        elif opcion == "7":
-            limpiar_archivos_generados()
-            print("✅ Archivos generados eliminados.")
-        elif opcion == "0":
-            print("👋 Saliendo del programa.")
-            break
-        else:
-            print("❌ Opción inválida. Intenta de nuevo.")
 
 def convertir_json_a_csv(json_file, csv_file):
     # Cargar los datos JSON desde el archivo con la codificación correcta
@@ -245,8 +173,6 @@ def convertir_json_a_csv(json_file, csv_file):
 
     print("El archivo JSON se ha convertido a CSV y se ha filtrado para el día actual.")
 
-
-
 def subir_a_bucket(csv_file_local, bucket_name):
     today_date = datetime.datetime.now().strftime("%Y-%m-%d")
     destination_blob_name = f"output/{today_date}/{csv_file_local.split('/')[-1]}"
@@ -256,6 +182,83 @@ def subir_a_bucket(csv_file_local, bucket_name):
     blob = bucket.blob(destination_blob_name)
     blob.upload_from_filename(csv_file_local)
 
-    print(f"Archivo subido a gs://{bucket_name}/{destination_blob_name}")
-if __name__ == "__main__":
-    main()
+    print(f"🔄 Archivos subidos a gs://{bucket_name}/{destination_blob_name}")
+
+def verificar_csv_no_vacio(csv_path):
+    if os.path.isfile(csv_path) and os.path.getsize(csv_path) > 0:
+        logging.info(f"📄 El CSV '{csv_path}' existe y no está vacío.")
+        return True
+    else:
+        logging.error(f"❌ El archivo CSV '{csv_path}' está vacío o no existe.")
+        return False
+
+def tabla_existe(client, project_id, dataset_id, table_id):
+    table_ref = f"{project_id}.{dataset_id}.{table_id}"
+    try:
+        client.get_table(table_ref)
+        logging.info(f"📊 La tabla '{table_ref}' existe en BigQuery.")
+        return True
+    except Exception as e:
+        logging.error(f"❌ No se encontró la tabla '{table_ref}': {e}")
+        return False
+
+def borrar_datos_tabla(client, project_id, dataset_id, table_id):
+    table_ref = f"{project_id}.{dataset_id}.{table_id}"
+    query = f"DELETE FROM `{table_ref}` WHERE TRUE"
+    client.query(query).result()
+    logging.info(f"🗑️ Se han borrado los datos existentes en la tabla '{table_ref}'.")
+
+def cargar_csv_a_bigquery(client, csv_path, project_id, dataset_id, table_id):
+    table_ref = f"{project_id}.{dataset_id}.{table_id}"
+    job_config = bigquery.LoadJobConfig(
+        source_format=bigquery.SourceFormat.CSV,
+        skip_leading_rows=1,
+        autodetect=False,
+        write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
+        schema_update_options=[],
+        field_delimiter=",",
+        quote_character='"',
+    )
+
+    # Construcción del esquema STRING + campo fecha_carga
+    with open(csv_path, 'r', encoding='utf-8') as f:
+        headers = f.readline().strip().split(',')
+
+    schema = [bigquery.SchemaField(col, "STRING") for col in headers]
+    schema.append(bigquery.SchemaField("fecha_carga", "DATE"))
+    job_config.schema = schema
+
+    # Añadir columna con la fecha de carga
+    today = datetime.datetime.now().strftime("%Y-%m-%d")
+    tmp_path = "tmp_bq_upload.csv"
+    with open(tmp_path, 'w', encoding='utf-8') as fout:
+        with open(csv_path, 'r', encoding='utf-8') as fin:
+            for i, line in enumerate(fin):
+                line = line.strip()
+                if i == 0:
+                    fout.write(f"{line},fecha_carga\n")
+                else:
+                    fout.write(f"{line},{today}\n")
+
+    with open(tmp_path, "rb") as source_file:
+        job = client.load_table_from_file(source_file, table_ref, job_config=job_config)
+        job.result()
+
+    os.remove(tmp_path)
+    logging.info(f"✅ Carga completada: {len(headers)} columnas + campo 'fecha_carga' en '{table_ref}'.")
+
+def automatizar_carga_bigquery(csv_path, project_id, dataset_id, table_id):
+    logging.info("🚀 Iniciando proceso de carga de datos a BigQuery...")
+
+    if not verificar_csv_no_vacio(csv_path):
+        return
+
+    client = bigquery.Client()
+
+    if not tabla_existe(client, project_id, dataset_id, table_id):
+        return
+
+    borrar_datos_tabla(client, project_id, dataset_id, table_id)
+    cargar_csv_a_bigquery(client, csv_path, project_id, dataset_id, table_id)
+
+    logging.info("🎯 Proceso finalizado correctamente.")
