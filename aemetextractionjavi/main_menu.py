@@ -228,9 +228,6 @@ def cargar_csv_a_bigquery(client, csv_path, project_id, dataset_id, table_id):
     # Reemplazar los guiones por guiones bajos en los nombres de las columnas
     headers = [header.replace('-', '_') for header in headers]
 
-    # Añadir columna con la fecha de carga
-    today = datetime.datetime.now().strftime("%Y-%m-%d")
-    
     # Crear un archivo temporal con la columna 'fecha_carga' añadida
     tmp_path = "tmp_bq_upload.csv"
     with open(tmp_path, 'w', encoding='utf-8') as fout:
@@ -240,7 +237,7 @@ def cargar_csv_a_bigquery(client, csv_path, project_id, dataset_id, table_id):
                 if i == 0:
                     fout.write(f"{','.join(headers)}\n")
                 else:
-                    fout.write(f"{line},{today}\n")
+                    fout.write(f"{line}\n")
 
     # Subir el archivo CSV modificado a BigQuery
     with open(tmp_path, "rb") as source_file:
