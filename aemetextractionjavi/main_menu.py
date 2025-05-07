@@ -238,7 +238,7 @@ def cargar_csv_a_bigquery(client, csv_path, project_id, dataset_id, table_id):
             for i, line in enumerate(fin):
                 line = line.strip()
                 if i == 0:
-                    fout.write(f"{','.join(headers)},fecha_carga\n")
+                    fout.write(f"{','.join(headers)}\n")
                 else:
                     fout.write(f"{line},{today}\n")
 
