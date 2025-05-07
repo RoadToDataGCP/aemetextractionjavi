@@ -210,6 +210,7 @@ def borrar_datos_tabla(client, project_id, dataset_id, table_id):
 
 def cargar_csv_a_bigquery(client, csv_path, project_id, dataset_id, table_id):
     table_ref = f"{project_id}.{dataset_id}.{table_id}"
+    
     job_config = bigquery.LoadJobConfig(
         source_format=bigquery.SourceFormat.CSV,
         skip_leading_rows=1,
@@ -220,32 +221,42 @@ def cargar_csv_a_bigquery(client, csv_path, project_id, dataset_id, table_id):
         quote_character='"',
     )
 
-    # Construcción del esquema STRING + campo fecha_carga
+    # Leer los encabezados del CSV y reemplazar guiones por guiones bajos
     with open(csv_path, 'r', encoding='utf-8') as f:
         headers = f.readline().strip().split(',')
+    
+    # Reemplazar los guiones por guiones bajos en los nombres de las columnas
+    headers = [header.replace('-', '_') for header in headers]
 
+    # Construir el esquema basado en los encabezados modificados
     schema = [bigquery.SchemaField(col, "STRING") for col in headers]
     schema.append(bigquery.SchemaField("fecha_carga", "DATE"))
     job_config.schema = schema
 
     # Añadir columna con la fecha de carga
     today = datetime.datetime.now().strftime("%Y-%m-%d")
+    
+    # Crear un archivo temporal con la columna 'fecha_carga' añadida
     tmp_path = "tmp_bq_upload.csv"
     with open(tmp_path, 'w', encoding='utf-8') as fout:
         with open(csv_path, 'r', encoding='utf-8') as fin:
             for i, line in enumerate(fin):
                 line = line.strip()
                 if i == 0:
-                    fout.write(f"{line},fecha_carga\n")
+                    fout.write(f"{','.join(headers)},fecha_carga\n")
                 else:
                     fout.write(f"{line},{today}\n")
 
+    # Subir el archivo CSV modificado a BigQuery
     with open(tmp_path, "rb") as source_file:
         job = client.load_table_from_file(source_file, table_ref, job_config=job_config)
         job.result()
 
+    # Eliminar el archivo temporal
     os.remove(tmp_path)
+
     logging.info(f"✅ Carga completada: {len(headers)} columnas + campo 'fecha_carga' en '{table_ref}'.")
+
 
 def automatizar_carga_bigquery(csv_path, project_id, dataset_id, table_id):
     logging.info("🚀 Iniciando proceso de carga de datos a BigQuery...")
